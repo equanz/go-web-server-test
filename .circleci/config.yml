@@ -1,6 +1,6 @@
 version: 2
 jobs:
-  build:
+  test:
     docker:
       - image: circleci/golang:1.11
     working_directory: /go/src/github.com/equanz/go-web-server-test
@@ -10,3 +10,33 @@ jobs:
           go get -v -t -d ./...
       - run:
           go test -v ./...
+  deploy:
+    docker:
+      - image: google/cloud-sdk
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 18.06.0-ce # for use docker command on CircleCI
+      - run: |
+          echo $GCLOUD_SERVICE_KEY | gcloud auth activate-service-account --key-file=-
+          gcloud --quiet config set project pospome-s-a
+          gcloud --quiet config set compute/zone asia-east1-b
+          gcloud --quiet auth configure-docker
+      - run:
+          name: Push docker image
+          command: |
+            docker build -t go-web-server .
+            TAG=gcr.io.pospome-s-a/go-web-server:pushed-`date +%Y%m%d%H%M%S`
+            docker tag go-web-server $TAG
+            docker push $TAG
+            LATEST_TAG=gcr.io/pospome-s-a/go-web-server:latest
+            docker tag go-web-server $LATEST_TAG
+            docker push $LATEST_TAG
+workflows:
+  version: 2
+  test_deploy:
+    jobs:
+      - test
+      - deploy:
+          requires:
+            - test
